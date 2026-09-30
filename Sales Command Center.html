@@ -1,0 +1,170 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Sales Command Center</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f5f6f8;--card:#fff;--bd:#e2e5ea;--tx:#151923;--mu:#596273;--ac:#3553d6;--ok:#0b7a4b;--wr:#9a5b00;--st:#5f4fb0;--bad:#b3261e;--inf:#a1340f;--sh:#eef0f4}
+:root[data-theme=dark]{--bg:#0d1016;--card:#151a23;--bd:#262d3a;--tx:#e8ebf1;--mu:#95a0b3;--ac:#7e9bff;--ok:#46c38a;--wr:#e0a23a;--st:#a99bff;--bad:#ff7b72;--inf:#ff9a6b;--sh:#1c2230}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0d1016;--card:#151a23;--bd:#262d3a;--tx:#e8ebf1;--mu:#95a0b3;--ac:#7e9bff;--ok:#46c38a;--wr:#e0a23a;--st:#a99bff;--bad:#ff7b72;--inf:#ff9a6b;--sh:#1c2230}}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;transition:background .2s,color .2s}
+.w{max-width:1240px;margin:0 auto;padding:14px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+h1{font-size:17px;margin:0;font-weight:650}h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);margin:0 0 8px;font-weight:600}
+.mu{color:var(--mu)}.r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,select,button{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:5px 8px}
+button{cursor:pointer}button:hover,tr[tabindex]:hover{background:var(--sh)}
+:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.g{display:grid;gap:10px;margin-bottom:12px}.k7{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.c2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px}
+.kpi{text-align:left;width:100%}.kpi b{display:block;font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;margin:2px 0}
+.up{color:var(--ok)}.dn{color:var(--bad)}
+.badge{display:inline-flex;gap:4px;align-items:center;border:1px solid currentColor;border-radius:99px;padding:0 7px;font-size:11px;font-weight:600;white-space:nowrap}
+.healthy,.won{color:var(--ok)}.risk{color:var(--wr)}.stale{color:var(--st)}.inflated,.lost{color:var(--inf)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+th{cursor:pointer;color:var(--mu);font-weight:600;font-size:11px}.tw{overflow-x:auto}
+.bar{height:8px;background:var(--sh);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.hb{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:6px 0}.hb i{display:block}
+ul{list-style:none;margin:0;padding:0}li.a{padding:7px 0;border-bottom:1px solid var(--bd);cursor:pointer;display:flex;gap:8px}li.a:hover{background:var(--sh)}
+aside{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--card);border-left:1px solid var(--bd);padding:16px;overflow:auto;padding-top:calc(16px + env(safe-area-inset-top,0px));box-shadow:-8px 0 24px #0003;z-index:5}
+.tl{border-left:2px solid var(--bd);margin-left:6px;padding-left:12px}.tl div{margin-bottom:6px}
+svg text{fill:var(--mu);font-size:9px}.f1{fill:var(--ac)}.f2{fill:var(--ok)}
+.demo{background:var(--sh);border:1px solid var(--bd);border-radius:99px;padding:1px 8px;font-size:11px;color:var(--mu)}
+@media(max-width:600px){.w{padding:10px}.kpi b{font-size:19px}}
+</style></head><body><div class="w" id="app"></div><aside id="dr" role="dialog" aria-label="Deal detail" hidden></aside>
+<script>
+/* ===== CONFIG (edit thresholds here; a settings UI can write to this object later) ===== */
+const CFG={today:'2026-09-30',staleDays:14,pushLimit:2,stageDays:{Lead:30,Qualified:30,Opportunity:35,Proposal:25,Negotiation:20},
+prob:{Lead:.05,Qualified:.15,Opportunity:.3,Proposal:.5,Negotiation:.75},goals:{revenue:600000,won:14,opps:40,meetings:90,proposals:30}};
+const STAGES=['Lead','Qualified','Opportunity','Proposal','Negotiation','Won','Lost'],OPEN=STAGES.slice(0,5);
+const DAY=864e5,T=s=>Date.parse(s+'T00:00:00Z'),NOW=T(CFG.today),ymd=t=>t?new Date(t).toISOString().slice(0,10):'—';
+/* ===== DATA LAYER: swap MockDataProvider for HubSpot/Sheets providers returning the same shapes ===== */
+class MockDataProvider{
+ constructor(){let s=11;const R=()=>(s=s*16807%2147483647)/2147483647,pick=a=>a[Math.floor(R()*a.length)];
+ const co=[['Northwind Analytics','Analytics'],['Lumenly','Marketing'],['Quorum Health Systems','Healthcare'],['Brightpath HR','HR Tech'],['Fieldstone Logistics','Logistics'],['Verdant Cloud','Infrastructure'],['Kestrel Security','Security'],['Pillar Payments','Fintech'],['Orbit Learning','EdTech'],['Tandem Robotics','Manufacturing'],['Cobalt Legal','Legal Tech'],['Meridian Freight','Logistics'],['Sable Insights','Analytics'],['Halcyon Care','Healthcare'],['Ridgeline Data','Data'],['Copperleaf Finance','Fintech'],['Nimbus Retail','Retail'],['Atlas Procurement','Procurement'],['Wavelength Media','Media'],['Ironbark Energy','Energy']];
+ this.users=[{id:'u1',name:'Raf',email:'raf@example.com',role:'AE'}];
+ this.companies=co.map((c,i)=>({id:'c'+i,name:c[0],industry:c[1],website:c[0].toLowerCase().replace(/[^a-z]/g,'')+'.com'}));
+ this.deals=[];this.activities=[];this.meetings=[];this.proposals=[];
+ const kinds=['Platform rollout','Team expansion','Annual subscription','Security add-on','Pilot upgrade','Multi-site license'];
+ for(let i=0;i<60;i++){const c=this.companies[i%20],cr=NOW-(4+R()*270)*DAY;let st='open',reached=Math.floor(R()*5),closed=null;const r=R();
+  if(r<.27){st='won';reached=5}else if(r<.5){st='lost';reached=1+Math.floor(R()*4)}
+  if(st!=='open'){closed=cr+(18+R()*75)*DAY;if(closed>NOW){st='open';closed=null;reached=Math.min(reached,4)}}
+  if(st==='open'&&NOW-cr>150*DAY&&R()<.6)reached=Math.min(reached,2);
+  const stage=st==='won'?'Won':st==='lost'?'Lost':STAGES[reached],idle=st!=='open'?0:(R()<.38?15+R()*40:R()*12);
+  const last=closed||Math.max(cr,NOW-idle*DAY),v=Math.round((R()**2*120000+7000)/500)*500;
+  const d={id:'d'+i,companyId:c.id,name:c.name.split(' ')[0]+' — '+pick(kinds),value:v,stage,probability:st==='won'?1:st==='lost'?0:CFG.prob[stage],status:st,createdAt:cr,
+   expectedCloseDate:closed||NOW+(R()*85-28)*DAY,closedAt:closed,ownerId:'u1',lastActivityAt:last,nextActivityAt:st==='open'&&R()<.72?NOW+(1+R()*10)*DAY:null,
+   pushes:R()<.3?2+Math.floor(R()*3):Math.floor(R()*2),stageSince:st==='open'?Math.max(cr,NOW-R()*50*DAY):closed,reached,proposalId:null};
+  const n=3+Math.floor(R()*4);for(let j=0;j<n;j++)this.activities.push({id:`a${i}_${j}`,dealId:d.id,type:pick(['call','email','meeting','note','task']),timestamp:cr+(last-cr)*(j/(n-1||1)),outcome:pick(['Connected','Left voicemail','Positive','Needs follow-up']),notes:''});
+  const nm=1+Math.floor(R()*3);for(let j=0;j<nm;j++){const at=cr+(last-cr)*R(),past=at<NOW,ss=past?(R()<.82?'completed':'canceled'):'booked';this.meetings.push({id:`m${i}_${j}`,companyId:c.id,dealId:d.id,scheduledAt:at,completedAt:ss==='completed'?at:null,status:ss,outcome:''})}
+  if(st==='open'&&d.nextActivityAt&&R()<.6)this.meetings.push({id:`m${i}_n`,companyId:c.id,dealId:d.id,scheduledAt:d.nextActivityAt,completedAt:null,status:'booked',outcome:''});
+  if(reached>=3){const sent=cr+(last-cr)*.6;d.proposalId='p'+i;this.proposals.push({id:'p'+i,dealId:d.id,value:v,sentAt:sent,status:st==='won'?'won':st==='lost'?'lost':'open',respondedAt:closed})}
+  this.deals.push(d)}
+ this.goals=Object.entries(CFG.goals).map(([m,t])=>({id:'g'+m,userId:'u1',metric:m,target:t,startDate:T('2026-01-01'),endDate:T('2026-12-31')}))}
+ async getDeals(){return this.deals}async getCompanies(){return this.companies}async getActivities(){return this.activities}
+ async getMeetings(){return this.meetings}async getProposals(){return this.proposals}async getUsers(){return this.users}async getGoals(){return this.goals}}
+/* ===== KPI LAYER: pure functions, no UI ===== */
+const inR=(t,r)=>t!=null&&t>=r.s&&t<=r.e,sum=a=>a.reduce((t,x)=>t+x.value,0);
+const K={
+ won:(d,r)=>d.filter(x=>x.status==='won'&&inR(x.closedAt,r)),lost:(d,r)=>d.filter(x=>x.status==='lost'&&inR(x.closedAt,r)),open:d=>d.filter(x=>x.status==='open'),
+ revenue:(d,r)=>sum(K.won(d,r)),
+ pipelineBy:(d,c)=>sum(K.open(d).filter(x=>x.h.c===c)),
+ winRate:(d,r)=>{const w=K.won(d,r).length,l=K.lost(d,r).length;return w+l?w/(w+l):null},
+ avgDeal:(d,r)=>{const w=K.won(d,r);return w.length?sum(w)/w.length:null},
+ cycle:(d,r)=>{const w=K.won(d,r);return w.length?w.reduce((t,x)=>t+(x.closedAt-x.createdAt)/DAY,0)/w.length:null},
+ forecast:d=>K.open(d).reduce((t,x)=>t+x.value*x.probability,0),
+ created:(d,r)=>d.filter(x=>inR(x.createdAt,r)),
+ attain:(a,t)=>t?a/t:0};
+function classify(x){ // configurable, heuristic rules — not objective facts
+ if(x.status!=='open')return{c:x.status,why:['Closed '+x.status]};const why=[],idle=(NOW-x.lastActivityAt)/DAY,over=x.expectedCloseDate<NOW,aged=(NOW-x.stageSince)/DAY>CFG.stageDays[x.stage];
+ if(idle>CFG.staleDays)why.push(`No activity for ${Math.round(idle)} days (limit ${CFG.staleDays})`);if(over)why.push(`Close date passed ${Math.round((NOW-x.expectedCloseDate)/DAY)} days ago`);
+ if(aged)why.push(`In ${x.stage} longer than ${CFG.stageDays[x.stage]} days`);if(!x.nextActivityAt)why.push('No next step scheduled');if(x.pushes>CFG.pushLimit)why.push(`Close date pushed ${x.pushes} times`);
+ const c=(over&&idle>CFG.staleDays)||x.pushes>CFG.pushLimit?'inflated':idle>CFG.staleDays?'stale':why.length?'risk':'healthy';return{c,why:why.length?why:['Recent activity, on track']}}
+/* ===== UI ===== */
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const $f=n=>n==null?'—':Math.abs(n)>=1e6?'$'+(n/1e6).toFixed(2)+'M':Math.abs(n)>=1e3?'$'+(n/1e3).toFixed(n>=1e5?0:1)+'K':'$'+Math.round(n),pc=n=>n==null?'—':Math.round(n*100)+'%';
+const LBL={healthy:['✓','Healthy'],risk:['▲','At risk'],stale:['◷','Stale'],inflated:['⚑','Potentially inflated'],won:['●','Closed won'],lost:['✕','Closed lost']};
+const badge=c=>`<span class="badge ${c}"><span aria-hidden="true">${LBL[c][0]}</span>${LBL[c][1]}</span>`;
+let S={r:{s:T('2026-01-01'),e:NOW},f:{q:'',stage:'',health:'',flag:''},sort:['value',-1],all:false,att:false},DB;
+const dfl=(a,b)=>{const p=b?(a-b)/Math.abs(b):null;return p==null?'':`<span class="${p>=0?'up':'dn'}">${p>=0?'▲':'▼'} ${Math.abs(Math.round(p*100))}% vs prior</span>`};
+function months(r){const o=[],d=new Date(r.s);d.setUTCDate(1);while(d.getTime()<=r.e){o.push(d.getTime());d.setUTCMonth(d.getUTCMonth()+1)}return o}
+const mk=t=>ymd(t).slice(0,7),cnt=(arr,key,ms)=>ms.map(m=>arr.filter(x=>mk(x[key])===mk(m)).length);
+function bars(title,ms,ser,money){const W=360,H=130,max=Math.max(1,...ser.flatMap(s=>s.v)),gw=(W-30)/ms.length,bw=Math.max(3,Math.min(18,gw/ser.length-2));
+ let o=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(title)}: ${ser.map(s=>s.n+' '+s.v.join(', ')).join('; ')}"><text x="0" y="9">${money?$f(max):max}</text>`;
+ ms.forEach((m,i)=>{ser.forEach((s,j)=>{const h=s.v[i]/max*(H-30),x=28+i*gw+j*(bw+1);o+=`<rect class="${s.c}" x="${x}" y="${H-18-h}" width="${bw}" height="${h}" rx="1"><title>${mk(m)} ${s.n}: ${money?$f(s.v[i]):s.v[i]}</title></rect>`});if(ms.length<=12||i%2==0)o+=`<text x="${28+i*gw}" y="${H-5}">${mk(m).slice(2)}</text>`});
+ return`<div class="card"><h2>${title}</h2>${o}</svg><div class="mu" style="font-size:11px">${ser.length>1?ser.map(s=>`<span class="${s.c==='f1'?'':'up'}">■</span> ${s.n}`).join(' &nbsp; '):''}</div></div>`}
+function filtered(){const f=S.f,q=f.q.toLowerCase();return DB.deals.filter(x=>(!q||(x.co.name+x.name).toLowerCase().includes(q))&&(!f.stage||x.stage===f.stage)&&(!f.health||x.h.c===f.health)&&
+ (f.flag!=='open'||x.status==='open')&&(f.flag!=='overdue'||(x.status==='open'&&x.expectedCloseDate<NOW))&&(f.flag!=='nonext'||(x.status==='open'&&!x.nextActivityAt))&&(f.flag!=='prop'||x.proposalId))}
+const kpi=(t,v,sub,tip,act)=>`<button class="card kpi" title="${esc(tip)}" data-act="${act||''}"><span class="mu">${t} ⓘ</span><b>${v}</b><span class="mu">${sub}</span></button>`;
+function render(){const{deals:D,meetings:M,proposals:P}=DB,r=S.r,len=r.e-r.s,pv={s:r.s-len-DAY,e:r.s-DAY},op=K.open(D),pipe=sum(op),inf=K.pipelineBy(D,'inflated'),st=K.pipelineBy(D,'stale'),rk=K.pipelineBy(D,'risk'),hl=K.pipelineBy(D,'healthy');
+ const w=K.won(D,r),l=K.lost(D,r),wr=K.winRate(D,r),wp=K.winRate(D,pv),ms=months(r),cr=K.created(D,r),mr=M.filter(m=>inR(m.scheduledAt,r)),mc=mr.filter(m=>m.status==='completed').length,mx=mr.filter(m=>m.status==='canceled').length;
+ const pr=P.filter(p=>inR(p.sentAt,r)),pw=pr.filter(p=>p.status==='won').length,pl=pr.filter(p=>p.status==='lost').length,G=CFG.goals;
+ const fRow=(k,a,b)=>{const p=K.attain(a,b);return`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between"><span>${k}</span><span>${k==='Revenue'?$f(a)+' / '+$f(b):a+' / '+b} · ${pc(p)}</span></div><div class="bar" role="progressbar" aria-valuenow="${Math.round(p*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${k} goal progress"><i style="width:${Math.min(100,p*100)}%"></i></div><span class="mu" style="font-size:11px">Remaining ${k==='Revenue'?$f(Math.max(0,b-a)):Math.max(0,b-a)} · needs ${k==='Revenue'?$f(Math.max(0,b-a)/Math.max(1,(r.e-NOW)/DAY/7+ (NOW>=r.e?0:0)||1)):Math.ceil(Math.max(0,b-a)/Math.max(1,(T('2026-12-31')-NOW)/DAY/7))}/wk to year-end</span></div>`};
+ const att=[],ov=op.filter(x=>x.expectedCloseDate<NOW),nn=op.filter(x=>!x.nextActivityAt),stl=op.filter(x=>x.h.c==='stale'||x.h.c==='inflated'),pp=op.filter(x=>x.proposalId&&(NOW-x.lastActivityAt)/DAY>7);
+ if(stl.length)att.push([stl.some(x=>x.value>40000)?3:2,`${stl.length} opportunities (${$f(sum(stl))}) are stale or potentially inflated`,{health:'stale'}]);
+ if(ov.length)att.push([3,`${ov.length} opportunities (${$f(sum(ov))}) are past their expected close date`,{flag:'overdue'}]);
+ if(pp.length)att.push([3,`${pp.length} open proposals (${$f(sum(pp))}) have had no activity for 7+ days`,{flag:'prop'}]);
+ if(nn.length)att.push([nn.some(x=>x.value>40000)?3:2,`${nn.length} opportunities have no next step`,{flag:'nonext'}]);
+ const wk=M.filter(m=>m.status==='booked'&&m.scheduledAt>=NOW&&m.scheduledAt<NOW+7*DAY).length;if(wk)att.push([1,`You have ${wk} meetings scheduled in the next 7 days`,null]);
+ if(wr!=null&&wp!=null&&wr<wp)att.push([2,`Win rate ${pc(wr)} is below the prior period (${pc(wp)})`,null]);
+ if(pipe&&(inf+st)/pipe>.3)att.push([2,`${pc((inf+st)/pipe)} of open pipeline is stale or potentially inflated — treat forecasts cautiously`,{health:'inflated'}]);
+ att.sort((a,b)=>b[0]-a[0]);const pl2=['','Low','Medium','High'],fa=Object.values(S.f).some(Boolean);
+ const fun=STAGES.slice(0,6).map((s,i)=>{const arr=D.filter(x=>s==='Won'?x.status==='won':x.reached>=i&&!(s!=='Lead'&&false));return{s,n:arr.length,v:sum(arr)}});
+ const rows=filtered().sort((a,b)=>{const k=S.sort[0],g=x=>k==='company'?x.co.name:x[k];return(g(a)>g(b)?1:-1)*S.sort[1]}),shown=S.all?rows:rows.slice(0,12);
+ const hb=[[hl,'healthy'],[rk,'risk'],[st,'stale'],[inf,'inflated']];
+ $('#app').innerHTML=`<header><div><h1>Sales Command Center <span class="demo">Demo data</span></h1><span class="mu">${new Date(NOW).toDateString()} · My Performance</span></div>
+ <div class="r"><label>From <input type="date" id="rs" value="${ymd(r.s)}"></label><label>To <input type="date" id="re" value="${ymd(r.e)}"></label>
+ <button id="th" aria-label="Toggle theme">◐ Theme</button><button id="rf" aria-label="Refresh data">↻ <span class="mu">Synced · demo</span></button></div></header>
+ <div class="g k7">${kpi('Revenue',$f(K.revenue(D,r)),dfl(K.revenue(D,r),K.revenue(D,pv)),`Sum of won deal value closed ${ymd(r.s)} to ${ymd(r.e)}. Prior period: ${$f(K.revenue(D,pv))}`,'won')}
+ ${kpi('Open pipeline',$f(pipe),`${op.length} deals · snapshot today`,'Sum of value of all open deals (not limited by date range)','open')}
+ ${kpi('Healthy pipeline',$f(hl),pc(pipe?hl/pipe:0)+' of pipeline','Open deals classified Healthy by the configurable rules in CFG','healthy')}
+ ${kpi('Deals won',w.length,$f(sum(w))+' '+dfl(w.length,K.won(D,pv).length),'Closed-won deals with close date in range','won')}
+ ${kpi('Deals lost',l.length,$f(sum(l))+' lost value','Closed-lost deals with close date in range','lost')}
+ ${kpi('Win rate',pc(wr),'Won ÷ (Won + Lost)','Win rate = Won ÷ (Won + Lost) for deals closed in range. Not based on total opportunities.','')}
+ ${kpi('Avg deal size',$f(K.avgDeal(D,r)),'Closed-won only','Total won value ÷ number of won deals in range','')}
+ ${kpi('Avg sales cycle',K.cycle(D,r)==null?'—':Math.round(K.cycle(D,r))+' d','Created → closed-won','Mean days from deal creation to close for won deals in range','')}
+ ${kpi('Forecast (weighted)',$f(K.forecast(D)),'Forecast, not actual','Σ open deal value × stage probability. A projection, separate from revenue.','open')}</div>
+ <div class="g c2"><div class="card"><h2>Pipeline health</h2><div class="hb" role="img" aria-label="Pipeline health split">${hb.map(([v,c])=>`<i class="${c}" style="width:${pipe?v/pipe*100:0}%;background:currentColor"></i>`).join('')}</div>
+ <div class="g" style="grid-template-columns:1fr 1fr;margin:0">${hb.map(([v,c])=>`<button data-h="${c}">${badge(c)}<br><b>${$f(v)}</b> <span class="mu">${op.filter(x=>x.h.c===c).length} deals</span></button>`).join('')}</div>
+ <p class="mu" style="font-size:11px;margin:8px 0 0">Classifications are rule-based heuristics (stale &gt; ${CFG.staleDays}d idle, past close date, stage aging, missing next step, repeated close-date pushes) — review, don’t treat as fact.</p></div>
+ <div class="card"><h2>Needs attention</h2><ul>${(S.att?att:att.slice(0,5)).map((a,i)=>`<li class="a" tabindex="0" data-a="${i}"><span class="badge ${a[0]==3?'inflated':a[0]==2?'risk':'mu'}">${pl2[a[0]]}</span><span>${a[1]}</span></li>`).join('')||'<li class="mu">Nothing needs attention 🎉</li>'}</ul>
+ ${att.length>5?`<button id="va" style="margin-top:8px">${S.att?'Show top 5':'View all '+att.length}</button>`:''}</div></div>
+ <div class="g c2"><div class="card"><h2>Sales funnel (all deals, reached stage)</h2>${fun.map((f,i)=>`<button data-st="${f.s==='Won'?'Won':f.s}" style="display:block;width:100%;margin-bottom:4px;text-align:left"><div style="display:flex;justify-content:space-between"><span>${f.s}</span><span>${f.n} · ${$f(f.v)}${i?` · ${pc(fun[i-1].n?f.n/fun[i-1].n:0)} from prior`:''}</span></div><div class="bar"><i style="width:${f.n/fun[0].n*100}%"></i></div></button>`).join('')}</div>
+ <div class="card"><h2>Open pipeline by stage</h2><div class="tw"><table><tr><th>Stage</th><th>Deals</th><th>Value</th><th>Avg age</th></tr>${OPEN.map(s=>{const a=op.filter(x=>x.stage===s);return`<tr tabindex="0" data-st="${s}" style="cursor:pointer"><td>${s}</td><td>${a.length}</td><td>${$f(sum(a))}</td><td>${a.length?Math.round(a.reduce((t,x)=>t+(NOW-x.createdAt)/DAY,0)/a.length)+' d':'—'}</td></tr>`}).join('')}</table></div></div></div>
+ <div class="g c2">${bars('Revenue by month (won)',ms,[{n:'Revenue',v:ms.map(m=>sum(w.filter(x=>mk(x.closedAt)===mk(m)))),c:'f1'}],true)}
+ ${bars(`New opportunities created — ${cr.length} total, ${(cr.length/ms.length).toFixed(1)}/mo avg`,ms,[{n:'Created',v:cnt(cr,'createdAt',ms),c:'f1'}])}
+ ${bars('Meetings booked vs completed',ms,[{n:'Booked',v:cnt(mr,'scheduledAt',ms),c:'f1'},{n:'Completed',v:cnt(mr.filter(m=>m.status==='completed'),'scheduledAt',ms),c:'f2'}])}
+ ${bars('Deals won vs lost',ms,[{n:'Won',v:cnt(w,'closedAt',ms),c:'f2'},{n:'Lost',v:cnt(l,'closedAt',ms),c:'f1'}])}</div>
+ <div class="g c2"><div class="card"><h2>Meetings & proposals</h2><p style="margin:0 0 6px"><b>${mr.length}</b> booked · <b>${mc}</b> completed · <b>${mx}</b> canceled · completion ${pc(mr.length?mc/mr.length:null)}</p>
+ <p style="margin:0 0 6px"><b>${pr.length}</b> proposals sent (${$f(sum(pr))}, avg ${$f(pr.length?sum(pr)/pr.length:null)}) · ${pw} won · ${pl} lost · conversion ${pc(pw+pl?pw/(pw+pl):null)} <button data-f="prop">View</button></p>
+ <h2>Upcoming meetings</h2><ul>${M.filter(m=>m.status==='booked'&&m.scheduledAt>=NOW).sort((a,b)=>a.scheduledAt-b.scheduledAt).slice(0,5).map(m=>{const d=DB.byId[m.dealId];return`<li class="a" tabindex="0" data-d="${d.id}">${ymd(m.scheduledAt)} — ${esc(d.co.name)}</li>`}).join('')||'<li class="mu">None scheduled</li>'}</ul></div>
+ <div class="card"><h2>Goals (My Performance, FY)</h2>${fRow('Revenue',K.revenue(D,r),G.revenue)}${fRow('Deals won',w.length,G.won)}${fRow('Opportunities',cr.length,G.opps)}${fRow('Meetings',mr.length,G.meetings)}${fRow('Proposals',pr.length,G.proposals)}</div></div>
+ <div class="card" id="tb"><h2>Deals (${rows.length})</h2><div class="r" style="margin-bottom:8px"><input id="q" type="search" placeholder="Search company or deal" aria-label="Search deals" value="${esc(S.f.q)}">
+ <select id="fs" aria-label="Stage filter"><option value="">All stages</option>${STAGES.map(s=>`<option ${S.f.stage===s?'selected':''}>${s}</option>`).join('')}</select>
+ <select id="fh" aria-label="Health filter"><option value="">All health</option>${Object.keys(LBL).map(c=>`<option value="${c}" ${S.f.health===c?'selected':''}>${LBL[c][1]}</option>`).join('')}</select>
+ ${fa?`<span class="badge risk">Filters active${S.f.flag?': '+S.f.flag:''}</span><button id="cf">Clear filters</button>`:''}</div>
+ <div class="tw">${rows.length?`<table><tr>${[['company','Company'],['name','Deal'],['value','Value'],['stage','Stage'],['probability','Prob.'],['expectedCloseDate','Close'],['createdAt','Days open'],['lastActivityAt','Last activity'],['nextActivityAt','Next'],['','Owner'],['','Health']].map(([k,t])=>`<th ${k?`data-s="${k}" tabindex="0"`:''}>${t}${S.sort[0]===k?S.sort[1]>0?' ▲':' ▼':''}</th>`).join('')}</tr>
+ ${shown.map(x=>`<tr tabindex="0" data-d="${x.id}" style="cursor:pointer"><td>${esc(x.co.name)}</td><td>${esc(x.name)}</td><td>${$f(x.value)}</td><td>${x.stage}</td><td>${pc(x.probability)}</td><td>${ymd(x.expectedCloseDate)}</td><td>${Math.round(((x.closedAt||NOW)-x.createdAt)/DAY)}</td><td>${ymd(x.lastActivityAt)}</td><td>${ymd(x.nextActivityAt)}</td><td>Raf</td><td>${badge(x.h.c)}</td></tr>`).join('')}</table>`:'<p class="mu">No deals match these filters.</p>'}</div>
+ ${rows.length>12?`<button id="sa" style="margin-top:8px">${S.all?'Show fewer':'Show all '+rows.length}</button>`:''}</div>
+ <p class="mu" style="font-size:11px">Demo data generated in-browser; all figures are calculated from it. Pipeline figures are a snapshot as of ${CFG.today}; revenue, win rate and charts follow the selected range.</p>`;
+ S.att_=att}
+function drawer(id){const x=DB.byId[id],a=DB.activities.filter(v=>v.dealId===id).sort((p,q)=>q.timestamp-p.timestamp),m=DB.meetings.filter(v=>v.dealId===id).sort((p,q)=>q.scheduledAt-p.scheduledAt),p=DB.proposals.find(v=>v.id===x.proposalId),d=$('#dr');
+ d.innerHTML=`<button id="cl" aria-label="Close detail" style="float:right">✕ Close</button><h1>${esc(x.name)}</h1><p>${esc(x.co.name)} · ${x.co.industry} · ${x.co.website}</p>${badge(x.h.c)}<ul style="margin:8px 0">${x.h.why.map(w=>`<li>• ${w}</li>`).join('')}</ul>
+ <p><b>${$f(x.value)}</b> · ${x.stage} · ${pc(x.probability)} probability<br>Created ${ymd(x.createdAt)} · Expected close ${ymd(x.expectedCloseDate)}${x.closedAt?' · Closed '+ymd(x.closedAt):''}<br>Days open ${Math.round(((x.closedAt||NOW)-x.createdAt)/DAY)} · Close date pushed ${x.pushes}×<br>Last activity ${ymd(x.lastActivityAt)} · Next ${ymd(x.nextActivityAt)}<br>Proposal: ${p?p.status+' (sent '+ymd(p.sentAt)+')':'none'}</p>
+ <h2>Meetings</h2><ul>${m.map(v=>`<li>${ymd(v.scheduledAt)} — ${v.status}</li>`).join('')}</ul><h2>Activity timeline</h2><div class="tl">${a.map(v=>`<div><b>${v.type}</b> · ${ymd(v.timestamp)}<br><span class="mu">${v.outcome}</span></div>`).join('')}</div>`;
+ d.hidden=false;$('#cl').focus()}
+function setF(o,scroll){S.f={q:'',stage:'',health:'',flag:'',...o};S.all=false;render();if(scroll)$('#tb').scrollIntoView({behavior:'smooth'})}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act],[data-h],[data-st],[data-f],[data-a],[data-d],[data-s],#cl,#cf,#va,#sa,#th,#rf');if(!t)return;
+ if(t.id==='cl')return $('#dr').hidden=true;if(t.id==='cf')return setF({});if(t.id==='va'){S.att=!S.att;return render()}if(t.id==='sa'){S.all=!S.all;return render()}
+ if(t.id==='th'){const n=(document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches))?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(_){}return}
+ if(t.id==='rf')return load();
+ const d=t.dataset;if(d.d)return drawer(d.d);if(d.s){S.sort=[d.s,S.sort[0]===d.s?-S.sort[1]:-1];return render()}
+ if(d.h)return setF({health:d.h},1);if(d.st)return setF({stage:d.st},1);if(d.f)return setF({flag:d.f},1);
+ if(d.a!=null){const f=S.att_[d.a][2];if(f)setF(f,1);return}
+ if(d.act){const m={won:{stage:'Won'},open:{flag:'open'},healthy:{health:'healthy'},lost:{stage:'Lost'}};if(m[d.act])setF(m[d.act],1)}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#dr').hidden=true;if(e.key==='Enter'&&e.target.matches('tr[tabindex],li[tabindex],th[tabindex]'))e.target.click()});
+document.addEventListener('change',e=>{const i=e.target.id;if(i==='rs'||i==='re'){const v=T(e.target.value);if(!isNaN(v)){S.r[i==='rs'?'s':'e']=v;if(S.r.s>S.r.e)S.r[i==='rs'?'e':'s']=v;render()}}
+ if(i==='fs'||i==='fh'){S.f[i==='fs'?'stage':'health']=e.target.value;S.all=false;render()}});
+document.addEventListener('input',e=>{if(e.target.id==='q'){S.f.q=e.target.value;const p=e.target.selectionStart;render();const q=$('#q');q.focus();q.setSelectionRange(p,p)}});
+async function load(){$('#app').innerHTML='<div class="card mu">Loading…</div>';try{const P=new MockDataProvider(),[deals,companies,activities,meetings,proposals,users,goals]=await Promise.all([P.getDeals(),P.getCompanies(),P.getActivities(),P.getMeetings(),P.getProposals(),P.getUsers(),P.getGoals()]);
+ const cm=Object.fromEntries(companies.map(c=>[c.id,c]));deals.forEach(x=>{x.co=cm[x.companyId];x.h=classify(x)});DB={deals,companies,activities,meetings,proposals,users,goals,byId:Object.fromEntries(deals.map(x=>[x.id,x]))};render()}catch(err){$('#app').innerHTML='<div class="card dn" role="alert">Could not load data: '+esc(err.message)+' <button id="rf">Retry</button></div>'}}
+try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(_){}
+load();
+</script></body></html>
